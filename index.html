@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Trading Risk App</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#111827">
+  <style>
+    :root{
+      --bg:#0f172a;--card:#111827;--card2:#1f2937;--text:#f9fafb;--muted:#9ca3af;
+      --green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--border:#374151;--blue:#38bdf8;
+    }
+    *{box-sizing:border-box}
+    body{font-family:Arial,sans-serif;margin:0;background:var(--bg);color:var(--text);padding:16px}
+    .wrap{max-width:760px;margin:auto}
+    h1{font-size:24px;margin:8px 0 4px}
+    h2{font-size:18px;margin:0 0 12px}
+    p{color:var(--muted);font-size:14px;line-height:1.4}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin:14px 0;box-shadow:0 10px 25px rgba(0,0,0,.25)}
+    label{display:block;margin-top:12px;font-weight:bold;font-size:14px}
+    input,select,textarea{width:100%;padding:12px;margin-top:6px;border-radius:10px;border:1px solid var(--border);background:#020617;color:var(--text);font-size:16px}
+    textarea{min-height:70px}
+    button{width:100%;padding:13px;border:0;border-radius:10px;font-size:16px;font-weight:bold;margin-top:12px;cursor:pointer}
+    .primary{background:var(--green);color:#052e16}
+    .secondary{background:#334155;color:var(--text)}
+    .danger{background:var(--red);color:white}
+    .row{display:flex;justify-content:space-between;gap:12px;margin:9px 0;border-bottom:1px solid rgba(255,255,255,.05);padding-bottom:6px}
+    .value{font-weight:bold;color:#86efac;text-align:right}
+    .warn{color:#fca5a5;font-weight:bold;margin-top:10px}
+    .ok{color:#86efac;font-weight:bold}
+    .bad{color:#fca5a5;font-weight:bold}
+    .tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+    .tab{background:#1e293b;color:var(--text);padding:10px;border-radius:10px;text-align:center;font-size:13px;border:1px solid var(--border)}
+    .tab.active{background:var(--blue);color:#082f49;font-weight:bold}
+    .hidden{display:none}
+    .check{display:flex;align-items:center;gap:10px;margin:9px 0;color:#e5e7eb}
+    .check input{width:auto;margin:0}
+    table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+    th,td{border-bottom:1px solid var(--border);padding:8px;text-align:left}
+    th{color:#cbd5e1}
+    .small{font-size:12px;color:var(--muted)}
+    .pill{display:inline-block;padding:3px 8px;border-radius:999px;font-size:12px;background:#334155}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Trading Risk App</h1>
+  <p>Calculadora operativa para tamaño de posición, R/R, checklist, diario y estadísticas. No sustituye tu criterio: lo obliga a ser explícito.</p>
+
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('calc', this)">Cálculo</div>
+    <div class="tab" onclick="showTab('check', this)">Checklist</div>
+    <div class="tab" onclick="showTab('journal', this)">Diario</div>
+    <div class="tab" onclick="showTab('stats', this)">Stats</div>
+  </div>
+
+  <section id="calc" class="card">
+    <h2>1. Position sizing</h2>
+    <label>Ticker</label>
+    <input id="ticker" placeholder="Ej: MSFT">
+
+    <label>Tipo operación</label>
+    <select id="side">
+      <option value="long">Long</option>
+      <option value="short">Short</option>
+    </select>
+
+    <label>Precio de entrada</label>
+    <input id="entry" type="number" step="0.01" placeholder="Ej: 421.83">
+
+    <label>Stop</label>
+    <input id="stop" type="number" step="0.01" placeholder="Ej: 398">
+
+    <label>Target 1</label>
+    <input id="target1" type="number" step="0.01" placeholder="Ej: 464">
+
+    <label>Pérdida máxima permitida (€/$)</label>
+    <input id="riskCash" type="number" step="0.01" value="75">
+
+    <label>Capital máximo por posición</label>
+    <input id="maxCapital" type="number" step="0.01" value="2500">
+
+    <button class="primary" onclick="calculate()">Calcular</button>
+
+    <div id="calcResult" class="card hidden" style="background:#020617">
+      <div class="row"><span>Riesgo por acción</span><span class="value" id="riskPerShare"></span></div>
+      <div class="row"><span>% hasta stop</span><span class="value" id="stopPct"></span></div>
+      <div class="row"><span>Acciones por riesgo</span><span class="value" id="sharesRisk"></span></div>
+      <div class="row"><span>Capital por riesgo</span><span class="value" id="capitalRisk"></span></div>
+      <div class="row"><span>Acciones finales</span><span class="value" id="sharesFinal"></span></div>
+      <div class="row"><span>Capital final</span><span class="value" id="capitalFinal"></span></div>
+      <div class="row"><span>Pérdida máxima real</span><span class="value" id="realLoss"></span></div>
+      <div class="row"><span>R/R a Target 1</span><span class="value" id="rr"></span></div>
+      <div id="calcWarning" class="warn"></div>
+    </div>
+  </section>
+
+  <section id="check" class="card hidden">
+    <h2>2. Checklist obligatorio</h2>
+    <p>Si falla un punto crítico, no hay operación. No se debate.</p>
+    <div id="checks"></div>
+    <button class="secondary" onclick="evaluateChecklist()">Evaluar checklist</button>
+    <div id="checkResult" style="margin-top:12px"></div>
+  </section>
+
+  <section id="journal" class="card hidden">
+    <h2>3. Diario de trading</h2>
+    <label>Resultado en R</label>
+    <input id="resultR" type="number" step="0.01" placeholder="Ej: 2.1 o -1">
+
+    <label>Error de ejecución</label>
+    <select id="execError">
+      <option value="No">No</option>
+      <option value="Sí">Sí</option>
+    </select>
+
+    <label>Notas</label>
+    <textarea id="notes" placeholder="Motivo de entrada, salida, aprendizaje..."></textarea>
+
+    <button class="primary" onclick="saveTrade()">Guardar operación</button>
+    <button class="secondary" onclick="exportCSV()">Exportar CSV</button>
+    <button class="danger" onclick="clearTrades()">Borrar diario</button>
+
+    <div id="journalTable"></div>
+  </section>
+
+  <section id="stats" class="card hidden">
+    <h2>4. Estadísticas</h2>
+    <div id="statsBox"></div>
+  </section>
+
+  <p class="small">v1 local. Los datos se guardan en este dispositivo mediante localStorage.</p>
+</div>
+
+<script>
+const checklistItems = [
+  "Mercado acompaña",
+  "Sector acompaña",
+  "La acción tiene fortaleza relativa",
+  "Hay zona clara",
+  "Hay trigger real, no anticipación",
+  "Stop técnico definido",
+  "R/R mínimo ≥ 2",
+  "Tamaño calculado por riesgo",
+  "No estoy entrando por FOMO",
+  "Puedo explicar el trade en 3 líneas"
+];
+
+function initChecks(){
+  const box = document.getElementById("checks");
+  box.innerHTML = checklistItems.map((x,i)=>`
+    <label class="check"><input type="checkbox" id="chk${i}"> ${x}</label>
+  `).join("");
+}
+initChecks();
+
+function showTab(id, el){
+  document.querySelectorAll("section").forEach(s=>s.classList.add("hidden"));
+  document.getElementById(id).classList.remove("hidden");
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+  el.classList.add("active");
+  if(id==="journal") renderJournal();
+  if(id==="stats") renderStats();
+}
+
+function getCalc(){
+  const side = document.getElementById("side").value;
+  const entry = parseFloat(document.getElementById("entry").value);
+  const stop = parseFloat(document.getElementById("stop").value);
+  const target1 = parseFloat(document.getElementById("target1").value);
+  const riskCash = parseFloat(document.getElementById("riskCash").value);
+  const maxCapital = parseFloat(document.getElementById("maxCapital").value);
+  return {side,entry,stop,target1,riskCash,maxCapital};
+}
+
+function calculate(){
+  const {side,entry,stop,target1,riskCash,maxCapital} = getCalc();
+  const warn = document.getElementById("calcWarning");
+  warn.textContent = "";
+
+  if(!entry || !stop || !riskCash || entry<=0 || stop<=0 || riskCash<=0){
+    alert("Entrada, stop y pérdida máxima son obligatorios.");
+    return null;
+  }
+  if(side==="long" && stop>=entry){ alert("En long, el stop debe estar por debajo de la entrada."); return null; }
+  if(side==="short" && stop<=entry){ alert("En short, el stop debe estar por encima de la entrada."); return null; }
+
+  const riskPerShare = Math.abs(entry-stop);
+  const stopPct = (riskPerShare/entry)*100;
+  const sharesRisk = Math.floor(riskCash/riskPerShare);
+  const capitalRisk = sharesRisk*entry;
+
+  let sharesFinal = sharesRisk;
+  if(maxCapital && capitalRisk>maxCapital){
+    sharesFinal = Math.floor(maxCapital/entry);
+    warn.textContent = "Aviso: limitado por capital máximo por posición.";
+  }
+
+  const capitalFinal = sharesFinal*entry;
+  const realLoss = sharesFinal*riskPerShare;
+
+  let rr = null;
+  if(target1){
+    const reward = side==="long" ? target1-entry : entry-target1;
+    rr = reward/riskPerShare;
+  }
+
+  document.getElementById("riskPerShare").textContent = riskPerShare.toFixed(2);
+  document.getElementById("stopPct").textContent = stopPct.toFixed(2)+"%";
+  document.getElementById("sharesRisk").textContent = sharesRisk;
+  document.getElementById("capitalRisk").textContent = capitalRisk.toFixed(2);
+  document.getElementById("sharesFinal").textContent = sharesFinal;
+  document.getElementById("capitalFinal").textContent = capitalFinal.toFixed(2);
+  document.getElementById("realLoss").textContent = realLoss.toFixed(2);
+  document.getElementById("rr").textContent = rr!==null ? rr.toFixed(2)+"R" : "—";
+  document.getElementById("calcResult").classList.remove("hidden");
+
+  if(sharesFinal<=0) warn.textContent = "No puedes comprar ni 1 acción respetando estos límites.";
+  if(rr!==null && rr<2) warn.textContent += " R/R inferior a 2: operación no permitida por sistema.";
+
+  return {riskPerShare,stopPct,sharesRisk,capitalRisk,sharesFinal,capitalFinal,realLoss,rr};
+}
+
+function evaluateChecklist(){
+  let checked = 0;
+  checklistItems.forEach((_,i)=>{ if(document.getElementById("chk"+i).checked) checked++; });
+  const result = document.getElementById("checkResult");
+  if(checked === checklistItems.length){
+    result.innerHTML = '<span class="ok">OK: operación permitida si el cálculo también cumple R/R y riesgo.</span>';
+  } else {
+    result.innerHTML = `<span class="bad">NO OPERAR: faltan ${checklistItems.length-checked} puntos.</span>`;
+  }
+}
+
+function getTrades(){
+  return JSON.parse(localStorage.getItem("trades") || "[]");
+}
+
+function setTrades(t){
+  localStorage.setItem("trades", JSON.stringify(t));
+}
+
+function saveTrade(){
+  const calc = calculate();
+  if(!calc) return;
+
+  const trade = {
+    date: new Date().toLocaleString(),
+    ticker: document.getElementById("ticker").value.trim().toUpperCase(),
+    side: document.getElementById("side").value,
+    entry: document.getElementById("entry").value,
+    stop: document.getElementById("stop").value,
+    target1: document.getElementById("target1").value,
+    shares: calc.sharesFinal,
+    capital: calc.capitalFinal.toFixed(2),
+    risk: calc.realLoss.toFixed(2),
+    rrPlan: calc.rr !== null ? calc.rr.toFixed(2) : "",
+    resultR: document.getElementById("resultR").value,
+    execError: document.getElementById("execError").value,
+    notes: document.getElementById("notes").value.replaceAll("\n"," ")
+  };
+
+  const trades = getTrades();
+  trades.push(trade);
+  setTrades(trades);
+  renderJournal();
+  alert("Operación guardada.");
+}
+
+function renderJournal(){
+  const trades = getTrades();
+  if(!trades.length){
+    document.getElementById("journalTable").innerHTML = "<p>No hay operaciones guardadas.</p>";
+    return;
+  }
+  document.getElementById("journalTable").innerHTML = `
+    <table>
+      <thead><tr><th>Fecha</th><th>Ticker</th><th>Side</th><th>Entrada</th><th>Stop</th><th>Acc.</th><th>R</th></tr></thead>
+      <tbody>${trades.map(t=>`
+        <tr><td>${t.date}</td><td>${t.ticker}</td><td>${t.side}</td><td>${t.entry}</td><td>${t.stop}</td><td>${t.shares}</td><td>${t.resultR || "—"}</td></tr>
+      `).join("")}</tbody>
+    </table>
+  `;
+}
+
+function renderStats(){
+  const trades = getTrades();
+  const closed = trades.filter(t=>t.resultR !== "" && !isNaN(parseFloat(t.resultR)));
+  if(!closed.length){
+    document.getElementById("statsBox").innerHTML = "<p>No hay operaciones cerradas con resultado en R.</p>";
+    return;
+  }
+  const r = closed.map(t=>parseFloat(t.resultR));
+  const wins = r.filter(x=>x>0);
+  const losses = r.filter(x=>x<0);
+  const winRate = wins.length/r.length*100;
+  const avgWin = wins.length ? wins.reduce((a,b)=>a+b,0)/wins.length : 0;
+  const avgLoss = losses.length ? losses.reduce((a,b)=>a+b,0)/losses.length : 0;
+  const expectancy = (wins.length/r.length)*avgWin + (losses.length/r.length)*avgLoss;
+  const grossWin = wins.reduce((a,b)=>a+b,0);
+  const grossLoss = Math.abs(losses.reduce((a,b)=>a+b,0));
+  const profitFactor = grossLoss ? grossWin/grossLoss : 999;
+  const errors = closed.filter(t=>t.execError==="Sí").length;
+
+  document.getElementById("statsBox").innerHTML = `
+    <div class="row"><span>Operaciones cerradas</span><span class="value">${closed.length}</span></div>
+    <div class="row"><span>Win rate</span><span class="value">${winRate.toFixed(1)}%</span></div>
+    <div class="row"><span>Ganancia media</span><span class="value">${avgWin.toFixed(2)}R</span></div>
+    <div class="row"><span>Pérdida media</span><span class="value">${avgLoss.toFixed(2)}R</span></div>
+    <div class="row"><span>Expectativa</span><span class="value">${expectancy.toFixed(2)}R/trade</span></div>
+    <div class="row"><span>Profit factor</span><span class="value">${profitFactor===999 ? "∞" : profitFactor.toFixed(2)}</span></div>
+    <div class="row"><span>Errores ejecución</span><span class="value">${errors}</span></div>
+  `;
+}
+
+function exportCSV(){
+  const trades = getTrades();
+  if(!trades.length){ alert("No hay datos para exportar."); return; }
+  const headers = Object.keys(trades[0]);
+  const rows = trades.map(t=>headers.map(h=>`"${String(t[h]).replaceAll('"','""')}"`).join(","));
+  const csv = [headers.join(","), ...rows].join("\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "diario_trading.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function clearTrades(){
+  if(confirm("¿Seguro que quieres borrar todo el diario?")){
+    localStorage.removeItem("trades");
+    renderJournal();
+    renderStats();
+  }
+}
+
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+</script>
+</body>
+</html>
