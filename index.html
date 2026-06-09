@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Trading Risk App v2</title>
+<title>Trading Risk App v3</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#111827">
 <style>
@@ -24,7 +24,7 @@ table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}th,td{b
 </head>
 <body>
 <div class="wrap">
-<h1>Trading Risk App v2</h1>
+<h1>Trading Risk App v3</h1>
 <p>Operaciones abiertas editables: puedes guardar la entrada y añadir cierre, resultado en R, error y notas más tarde.</p>
 <div class="tabs">
 <div class="tab active" onclick="showTab('calc',this)">Cálculo</div><div class="tab" onclick="showTab('check',this)">Checklist</div><div class="tab" onclick="showTab('journal',this)">Diario</div><div class="tab" onclick="showTab('stats',this)">Stats</div>
@@ -62,17 +62,17 @@ table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}th,td{b
 <h2 id="editTitle">Editar operación</h2><input type="hidden" id="editId">
 <label>Estado</label><select id="editStatus"><option value="Abierta">Abierta</option><option value="Cerrada">Cerrada</option></select>
 <label>Resultado en R</label><input id="editResultR" type="number" step="0.01" placeholder="Ej: 2.1 o -1">
-<label>Precio de salida</label><input id="editExit" type="number" step="0.01" placeholder="Opcional">
+<label>Precio de salida</label><input id="editExit" type="number" step="0.01" placeholder="Al ponerlo calcula R automáticamente" oninput="autoCalculateEditR()"><div class="small" id="editRInfo"></div>
 <label>Error de ejecución</label><select id="editExecError"><option value="No">No</option><option value="Sí">Sí</option></select>
 <label>Notas</label><textarea id="editNotes"></textarea>
 <button class="primary" onclick="updateTrade()">Guardar cambios</button><button class="secondary" onclick="cancelEdit()">Cancelar</button>
 </div>
-<button class="secondary" onclick="exportCSV()">Exportar CSV</button><button class="danger" onclick="clearTrades()">Borrar diario completo</button>
+<h2>Exportar CSV</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="secondary" onclick="exportCSV('all')">Exportar todo</button><button class="secondary" onclick="exportCSV('closed')">Solo cerradas</button></div><h2 style="margin-top:18px">Borrar datos</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="danger" onclick="clearTrades()">Borrar todo</button><button class="danger" onclick="clearClosedTrades()">Borrar cerradas</button></div>
 <div id="journalTable"></div>
 </section>
 
 <section id="stats" class="card hidden"><h2>4. Estadísticas</h2><div id="statsBox"></div></section>
-<p class="small">v2 local. Datos guardados en este dispositivo mediante localStorage.</p>
+<p class="small">v3 local. Datos guardados en este dispositivo mediante localStorage.</p>
 </div>
 
 <script>
@@ -92,13 +92,17 @@ function getTrades(){return JSON.parse(localStorage.getItem("trades")||"[]").map
 function setTrades(t){localStorage.setItem("trades",JSON.stringify(t))}
 function saveTrade(){const c=calculate(),d=getCalc(); if(!c)return; if(!d.ticker){alert("Añade ticker.");return} const trade={id:String(Date.now()),date:new Date().toLocaleString(),ticker:d.ticker,side:d.side,entry:d.entry,stop:d.stop,target1:d.target1||"",shares:c.sharesFinal,capital:c.capitalFinal.toFixed(2),risk:c.realLoss.toFixed(2),rrPlan:c.rr!==null?c.rr.toFixed(2):"",status:"Abierta",exit:"",resultR:"",execError:"",notes:""}; const arr=getTrades(); arr.push(trade); setTrades(arr); alert("Operación abierta guardada."); showTab("journal",document.querySelectorAll(".tab")[2])}
 function renderJournal(){const t=getTrades(); if(!t.length){journalTable.innerHTML="<p>No hay operaciones.</p>";return} journalTable.innerHTML=`<table><thead><tr><th>Fecha</th><th>Ticker</th><th>Estado</th><th>Entrada</th><th>Stop</th><th>Acc.</th><th>R</th><th>Acción</th></tr></thead><tbody>${t.map(x=>`<tr><td>${x.date}</td><td>${x.ticker}<br><span class="small">${x.side}</span></td><td><span class="${x.status==="Cerrada"?"closed":"open"}">${x.status}</span></td><td>${x.entry}</td><td>${x.stop}</td><td>${x.shares}</td><td>${x.resultR||"—"}</td><td><div class="actions"><button class="yellow" onclick="editTrade('${x.id}')">Editar</button><button class="danger" onclick="deleteTrade('${x.id}')">X</button></div></td></tr>`).join("")}</tbody></table>`}
-function editTrade(id){const t=getTrades().find(x=>x.id===id); if(!t)return; editBox.classList.remove("hidden"); editTitle.textContent="Editar "+t.ticker; editId.value=t.id; editStatus.value=t.status; editResultR.value=t.resultR||""; editExit.value=t.exit||""; editExecError.value=t.execError||"No"; editNotes.value=t.notes||""; window.scrollTo({top:0,behavior:"smooth"})}
-function updateTrade(){const id=editId.value, arr=getTrades(), i=arr.findIndex(x=>x.id===id); if(i<0)return; arr[i].status=editStatus.value; arr[i].resultR=editResultR.value; arr[i].exit=editExit.value; arr[i].execError=editExecError.value; arr[i].notes=editNotes.value.replaceAll("\n"," "); arr[i].updated=new Date().toLocaleString(); if(arr[i].resultR!==""&&arr[i].status==="Abierta")arr[i].status="Cerrada"; setTrades(arr); cancelEdit(); renderJournal()}
+function calculateRFromExit(trade,exitPrice){const entry=parseFloat(trade.entry),stop=parseFloat(trade.stop),exit=parseFloat(exitPrice); if(!entry||!stop||!exit)return ""; const risk=Math.abs(entry-stop); if(risk===0)return ""; const r=trade.side==="long"?(exit-entry)/risk:(entry-exit)/risk; return r.toFixed(2)}
+function editTrade(id){const t=getTrades().find(x=>x.id===id); if(!t)return; editBox.classList.remove("hidden"); editTitle.textContent="Editar "+t.ticker; editId.value=t.id; editStatus.value=t.status; editResultR.value=t.resultR||""; editExit.value=t.exit||""; editExecError.value=t.execError||"No"; editNotes.value=t.notes||""; editRInfo.textContent="R se calcula así: beneficio por acción / riesgo por acción."; autoCalculateEditR(); window.scrollTo({top:0,behavior:"smooth"})}
+function autoCalculateEditR(){const id=editId.value; if(!id)return; const t=getTrades().find(x=>x.id===id); if(!t)return; const r=calculateRFromExit(t,editExit.value); if(r!==""){editResultR.value=r; editRInfo.textContent=`R automático calculado: ${r}R`}else{editRInfo.textContent="Introduce precio de salida para calcular R automáticamente."}}
+function updateTrade(){const id=editId.value, arr=getTrades(), i=arr.findIndex(x=>x.id===id); if(i<0)return; const autoR=calculateRFromExit(arr[i],editExit.value); arr[i].status=editStatus.value; arr[i].resultR=autoR!==""?autoR:editResultR.value; arr[i].exit=editExit.value; arr[i].execError=editExecError.value; arr[i].notes=editNotes.value.replaceAll("\n"," "); arr[i].updated=new Date().toLocaleString(); if(arr[i].exit!==""&&arr[i].status==="Abierta")arr[i].status="Cerrada"; if(arr[i].resultR!==""&&arr[i].status==="Abierta")arr[i].status="Cerrada"; setTrades(arr); cancelEdit(); renderJournal(); renderStats()}
 function cancelEdit(){editBox.classList.add("hidden"); editId.value=""}
 function deleteTrade(id){if(!confirm("¿Borrar esta operación?"))return; setTrades(getTrades().filter(x=>x.id!==id)); renderJournal()}
 function renderStats(){const t=getTrades(), closed=t.filter(x=>x.status==="Cerrada"&&x.resultR!==""&&!isNaN(parseFloat(x.resultR))), open=t.filter(x=>x.status!=="Cerrada"); let h=`<div class="row"><span>Total</span><span class="value">${t.length}</span></div><div class="row"><span>Abiertas</span><span class="value">${open.length}</span></div><div class="row"><span>Cerradas con R</span><span class="value">${closed.length}</span></div>`; if(closed.length){const r=closed.map(x=>parseFloat(x.resultR)),w=r.filter(x=>x>0),l=r.filter(x=>x<0),wr=w.length/r.length*100,aw=w.length?w.reduce((a,b)=>a+b,0)/w.length:0,al=l.length?l.reduce((a,b)=>a+b,0)/l.length:0,exp=(w.length/r.length)*aw+(l.length/r.length)*al,pf=Math.abs(l.reduce((a,b)=>a+b,0))?w.reduce((a,b)=>a+b,0)/Math.abs(l.reduce((a,b)=>a+b,0)):999,err=closed.filter(x=>x.execError==="Sí").length; h+=`<div class="row"><span>Win rate</span><span class="value">${wr.toFixed(1)}%</span></div><div class="row"><span>Expectativa</span><span class="value">${exp.toFixed(2)}R</span></div><div class="row"><span>Profit factor</span><span class="value">${pf===999?"∞":pf.toFixed(2)}</span></div><div class="row"><span>Errores</span><span class="value">${err}</span></div>`} statsBox.innerHTML=h}
-function exportCSV(){const t=getTrades(); if(!t.length){alert("No hay datos.");return} const headers=Object.keys(t[0]); const rows=t.map(x=>headers.map(h=>`"${String(x[h]??"").replaceAll('"','""')}"`).join(",")); const blob=new Blob([[headers.join(","),...rows].join("\n")],{type:"text/csv;charset=utf-8"}); const url=URL.createObjectURL(blob),a=document.createElement("a"); a.href=url;a.download="diario_trading.csv";a.click();URL.revokeObjectURL(url)}
-function clearTrades(){if(confirm("¿Borrar todo el diario?")){localStorage.removeItem("trades");renderJournal();renderStats()}}
+function filterTrades(mode){const t=getTrades(); return mode==="closed"?t.filter(x=>x.status==="Cerrada"):t}
+function exportCSV(mode){const t=filterTrades(mode); if(!t.length){alert("No hay datos para exportar.");return} const headers=Object.keys(t[0]); const rows=t.map(x=>headers.map(h=>`"${String(x[h]??"").replaceAll('"','""')}"`).join(",")); const blob=new Blob([[headers.join(","),...rows].join("\n")],{type:"text/csv;charset=utf-8"}); const url=URL.createObjectURL(blob),a=document.createElement("a"); a.href=url;a.download=mode==="closed"?"diario_trading_cerradas.csv":"diario_trading_todo.csv";a.click();URL.revokeObjectURL(url)}
+function clearTrades(){if(confirm("¿Borrar TODO el diario? Esta acción no se puede deshacer.")){localStorage.removeItem("trades");renderJournal();renderStats()}}
+function clearClosedTrades(){if(confirm("¿Borrar solo operaciones cerradas? Las abiertas se conservarán.")){setTrades(getTrades().filter(x=>x.status!=="Cerrada"));renderJournal();renderStats()}}
 if("serviceWorker"in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{})}
 </script>
 </body>
